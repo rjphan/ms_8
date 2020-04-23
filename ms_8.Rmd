@@ -1,0 +1,136 @@
+---
+title: "ms_8"
+author: "Rachel Phan"
+date: "4/21/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(janitor)
+library(readr)
+library(readxl)
+library(lubridate)
+library(stringr)
+library(gganimate)
+library(ggplot2)
+library(usmap)
+library(maps)
+library(gganimate)
+```
+
+
+```{r loading data, include=FALSE}
+
+# Obesity data from https://chronicdata.cdc.gov/Nutrition-Physical-Activity-and-Obesity/Nutrition-Physical-Activity-and-Obesity-Behavioral/hn4x-zwk7/data (Center for Disease Control)
+
+obesity_x <- read_csv("Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System.csv")
+
+# Food access data from https://www.ers.usda.gov/data-products/food-access-research-atlas/ (United States Department of Agriculture)
+
+food_access <- read_excel("Food Accessibility.xlsx", sheet = 3)
+
+# Rural income data from https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/ (United States Department of Agriculture)
+
+rural_income <- read_csv("Rural Atlas Data/Income.csv")
+
+# Income data for all US Counties from https://www.ers.usda.gov/data-products/county-level-data-sets/download-data/ (US Bureau of Labour Statistics)
+
+income <- read_excel("Unemployment.xls", skip = 4)
+
+# Consumer Price Index ata from https://www.ers.usda.gov/data-products/food-price-outlook/ (United States Department of Agriculture)
+
+cpi <- read_excel("historicalcpi.xlsx", skip = 1)
+
+# What I want to observe here is how different variables affect obesity in the US - income, food accessibility, year, ethnicity, food price, which users can choose from when they pick the graph. Then I want to map out obesity/BMI onto a map of the US. I 
+
+# If obesity is affected by food access, then can look deeper into food access. How does ruralness affect food access? How do consumer food price indexes affect food accessibility? How does SNAP policy affect food access (can look at SNAP data from USDA: https://www.ers.usda.gov/data-products/snap-policy-data-sets/).
+
+```
+
+```{r clean obesity data, include=FALSE}
+
+obesity_x <- obesity_x %>% 
+    select(YearStart, LocationAbbr, Class, Data_Value, Low_Confidence_Limit, High_Confidence_Limit,
+           Sample_Size, "Age(years)", Education, Gender, Income, "Race/Ethnicity")
+
+obesity <- obesity_x %>% 
+    rename("state" = LocationAbbr,
+           "year" = YearStart,
+           "bmi" = Data_Value,
+           "conf.low" = Low_Confidence_Limit,
+           "conf.high" = High_Confidence_Limit,
+           "sample_size" = Sample_Size,
+           "age" = "Age(years)",
+           "education" = Education,
+           "gender" = Gender,
+           "class" = Class,
+           "race" = "Race/Ethnicity",
+           "income" = Income) %>% 
+    filter(class == "Obesity / Weight Status",
+           !is.na(bmi)) %>% 
+    select(-class)
+
+obesity_mean <- obesity %>% 
+    group_by(state, year) %>% 
+    summarise(mean_bmi = mean(bmi)) %>% 
+    filter(state != "US")
+
+plot_usmap(data = obesity_mean, values = "mean_bmi", color = "red", labels = FALSE) + 
+    scale_fill_continuous(name = "bmi") + 
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5)) + 
+    scale_fill_continuous(low = "white", high = "red", name = "BMI") +
+    labs(title = "BMI in the US from 2011-2018",
+         subtitle = "BMI ",
+         caption = "Data from Center for Disease Control") +
+    theme_void() +
+    transition_time(year)
+
+View(obesity_mean)
+
+```
+
+
+
+Shiny App
+
+ fluidPage(
+
+    titlePanel("GOV1005 Final Project"),
+    
+    navlistPanel("Header A",
+                 tabPanel("Component 1"),
+                 "Header B",
+                 tabPanel("Component 3"),
+                 tabPanel("Component 4")
+    ),
+
+    sidebarLayout(position = "right",
+        sidebarPanel(img(src = "cartoon.png", height = 140, width = 200)),
+        mainPanel(h3("Red Meat Production in the US Over Time"),
+                  imageOutput("meat_clean_plot"),
+                  br(),
+                  br(),
+                  br(),
+                  br(),
+                  br(),
+                  br(),
+                  actionButton("action", "Click")
+    )
+)
+
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+    
+    output$meat_clean_plot <- renderImage({
+        list(src = "meat_clean_plot.png",
+             contentType = 'image/png',
+             width = 550,
+             height = 500)},
+        deleteFile = FALSE
+    )  
+}
