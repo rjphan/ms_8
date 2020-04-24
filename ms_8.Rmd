@@ -18,6 +18,7 @@ library(ggplot2)
 library(usmap)
 library(maps)
 library(gganimate)
+library(scales)
 ```
 
 
@@ -74,7 +75,7 @@ obesity <- obesity_x %>%
 
 ```
 
-```{r obesity mean plot, include=FALSE}
+```{r obesity mean by year, include=FALSE}
 
 obesity_mean <- obesity %>% 
     group_by(state, year) %>% 
@@ -85,7 +86,8 @@ obesity_mean_plot <- plot_usmap(data = obesity_mean, values = "mean_perc", color
     theme(legend.position = "right",
           plot.title = element_text(hjust = 0.5)) + 
     scale_fill_continuous(low = "white", high = "red", name = "Percent Obese") +
-    labs(title = "Percent of Population (age 18+) Classified as Obese or Overweight in the US \n Year: {as.integer(frame_time)}",
+    labs(title = "Percent of Population (age 18+) Classified as Obese or Overweight in the US \n Year:
+         {as.integer(frame_time)}",
          subtitle = "Percent of population tends to increase as time goes on",
          caption = "Data from Center for Disease Control") +
     theme_void() +
@@ -97,7 +99,7 @@ anim_save("plots/obesity_mean_usmap.gif", plot = last_animation())
 
 ```
 
-```{r obesity by region}
+```{r obesity by region, include=FALSE}
 
 obesity_region <- obesity_mean %>% 
     mutate(region = case_when(
@@ -122,6 +124,7 @@ obesity_region_plot <- obesity_region %>%
          color = "Region") +
     geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
     facet_wrap(~ region)
+
 obesity_region_plot
     
 ggsave("plots/obesity_region_plot.png", plot = last_plot())
@@ -133,13 +136,13 @@ ggsave("plots/obesity_region_plot.png", plot = last_plot())
 food_access_x <- food_access_x %>% 
     select(State, County, Urban, POP2010, LILATracts_1And10, PovertyRate, MedianFamilyIncome, LA1and10, LAPOP1_10)
 
-food_access <- food_access_x %>% 
+food_access_y <- food_access_x %>% 
     rename("state" = State,
            "county" = County,
            "popul" = POP2010,
            "urban" = Urban,
            "lia_1_10" = LILATracts_1And10,
-           "poverty_rate" = PovertyRate,
+           "poverty" = PovertyRate,
            "med_income" = MedianFamilyIncome,
            "la_1_10" = LA1and10,
            "la_popul" = LAPOP1_10) %>% 
@@ -147,11 +150,74 @@ food_access <- food_access_x %>%
            lia_1_10 = as.factor(lia_1_10),
            la_1_10 = as.factor(la_1_10))
 
-food_access$state = state.abb[match(food_access$state, state.name)]
+food_access_y$state = state.abb[match(food_access_y$state, state.name)]
 
-View(food_access)
+food_access <- food_access_y %>% 
+    mutate(region = case_when(
+        state %in% c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA") ~ "Northeast",
+        state %in% c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD") ~ "Midwest",
+        state %in% c("DC", "DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", 
+                     "LA", "OK", "TX") ~ "South",
+        state %in% c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA") ~ "West")
+    ) %>% 
+    select(-county) 
 
 ```
+
+```{r mean poverty by state, include = FALSE}
+
+food_poverty_mean <- food_access %>%
+    filter(!is.na(region)) %>% 
+    group_by(state) %>% 
+    summarise(mean_poverty = mean(poverty))
+
+food_poverty_mean_plot <- plot_usmap(data = food_poverty_mean, values = "mean_poverty", 
+                                     color = "green", labels = FALSE) +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5)) + 
+    scale_fill_continuous(low = "white", high = "green", name = "Mean Poverty Rate") +
+    labs(title = "Poverty Rate in the US",
+         caption = "Data from US Department of Agriculture and 2010 Census Bureau") +
+    theme_void()
+food_poverty_mean_plot
+
+ggsave("plots/food_poverty_plot.png", plot = last_plot())
+
+```
+
+```{r food access lia distribution, include=FALSE}
+
+food_lia <- food_access %>%
+    filter(!is.na(region)) %>% 
+    group_by(state, region) %>% 
+    summarise(perc = sum(lia_1_10 == 1)/n()) %>% 
+    mutate(perc = perc*100) %>% 
+    mutate(perc = round(as.numeric(perc), digits = 0)) %>% 
+    arrange(perc)
+
+# food_lia$perc =  paste(round(100*food_lia$perc, digits = 0), "%", sep="") 
+
+food_lia_plot <- food_lia %>% 
+    group_by(region) %>% 
+    ggplot(aes(x = reorder(state, perc), y = perc, fill = region)) +
+    geom_col() +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 65, hjust = 0.3, size = 7),
+          panel.grid.major.x = element_line(color = "white"),
+          plot.subtitle = element_text(size = 8)) +
+    labs(title = "Percent of Counties with a Lack of Food Access",
+         subtitle = "Lack of Food Access Defined by 33% of the Population Living More Than \n 1 Mile (Urban) Or 10 Miles (Rural) Away from Supermarket, Supercenter, or Grocery Store",
+         caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+         x = "State",
+         y = "Percent of Counties",
+         fill = "Region")
+
+food_lia_plot
+
+ggsave("plots/food_lia_plot.png", plot = last_plot())
+
+```
+
 
 
 Shiny App
