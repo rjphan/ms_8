@@ -77,6 +77,8 @@ obesity <- obesity_x %>%
 
 ```{r obesity mean by year, include=FALSE}
 
+# Maybe choose a state to look at its obesity rate change over time
+
 obesity_mean <- obesity %>% 
     group_by(state, year) %>% 
     summarise(mean_perc = mean(perc_obese)) %>% 
@@ -134,18 +136,20 @@ ggsave("plots/obesity_region_plot.png", plot = last_plot())
 ```{r clean food access data, include=FALSE}
 
 food_access_x <- food_access_x %>% 
-    select(State, County, Urban, POP2010, LILATracts_1And10, PovertyRate, MedianFamilyIncome, LA1and10, LAPOP1_10)
+    select(State, County, Urban, POP2010, LILATracts_1And10, PovertyRate, MedianFamilyIncome, 
+           LA1and10, LAPOP1_10, LALOWI1_10)
 
 food_access_y <- food_access_x %>% 
     rename("state" = State,
            "county" = County,
            "popul" = POP2010,
            "urban" = Urban,
-           "lia_1_10" = LILATracts_1And10,
            "poverty" = PovertyRate,
            "med_income" = MedianFamilyIncome,
+           "lia_1_10" = LILATracts_1And10,
            "la_1_10" = LA1and10,
-           "la_popul" = LAPOP1_10) %>% 
+           "lia_pop"= LALOWI1_10,
+           "la_pop" = LAPOP1_10) %>% 
     mutate(urban = as.factor(urban),
            lia_1_10 = as.factor(lia_1_10),
            la_1_10 = as.factor(la_1_10))
@@ -199,18 +203,20 @@ food_lia <- food_access %>%
 
 food_lia_plot <- food_lia %>% 
     group_by(region) %>% 
-    ggplot(aes(x = reorder(state, perc), y = perc, fill = region)) +
+    ggplot(aes(y = reorder(state, perc), x = perc, fill = region)) +
     geom_col() +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 65, hjust = 0.3, size = 7),
-          panel.grid.major.x = element_line(color = "white"),
+    theme(axis.text.y = element_text(hjust = 1, size = 5.5),
+          panel.grid.major.y = element_line(color = "white"),
+          panel.grid.minor.y = element_line(color = "white"),
           plot.subtitle = element_text(size = 8)) +
-    labs(title = "Percent of Counties with a Lack of Food Access",
-         subtitle = "Lack of Food Access Defined by 33% of the Population Living More Than \n 1 Mile (Urban) Or 10 Miles (Rural) Away from Supermarket, Supercenter, or Grocery Store",
+    labs(title = "Percent of Counties with a Lack of Food Access and Low Income Population",
+         subtitle = "Lack of Food Access Defined by 33% of the Population Living More Than \n 1 Mile (Urban) Or 10 Miles (Rural) Away from Supermarket, Supercenter, or Grocery Store Who are Low Income",
          caption = "Data from US Department of Agriculture and 2010 Census Bureau",
-         x = "State",
-         y = "Percent of Counties",
-         fill = "Region")
+         x = "Percent of Counties",
+         y = "State",
+         fill = "Region") +
+    geom_text(aes(label = perc), hjust = -0.3, size = 2)
 
 food_lia_plot
 
@@ -219,6 +225,47 @@ ggsave("plots/food_lia_plot.png", plot = last_plot())
 ```
 
 ```{r join obesity and food access, include=FALSE}
+
+# compare % of people that're obese to % of people that're lia and la
+
+obesity <- obesity %>% 
+     mutate(region = case_when(
+        state %in% c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA") ~ "Northeast",
+        state %in% c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD") ~ "Midwest",
+        state %in% c("DC", "DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", 
+                     "LA", "OK", "TX") ~ "South",
+        state %in% c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA") ~ "West")
+    ) %>% 
+    mutate(year = as.numeric(year))
+
+obesity_2011 <- obesity %>% 
+    filter(year == 2011) %>%
+    group_by(state, age, gender, income, race) %>% 
+    summarise(mean_perc_obese = round(mean(perc_obese), digits = 0)) %>% 
+    filter(state != "US" & state != "DC")
+
+food_sum <- food_access %>% 
+    group_by(state, urban) %>% 
+    mutate(total_pop = sum(popul),
+           total_lia_pop = sum(lia_pop),
+           total_la_pop = sum(la_pop),
+           perc_lia = round((total_lia_pop/total_pop)*100, digits = 0),
+           perc_la = round((total_la_pop/total_pop)*100, digits = 0)) %>% 
+    group_by(state, perc_lia, perc_la, urban) %>% 
+    summarise(mean_poverty = round(mean(poverty), digits = 0)) %>% 
+    filter(!is.na(state))
+
+food_sum <- food_access %>% 
+    group_by(state, urban, lia_pop, la_pop, region) %>% 
+    summarise(total_pop = sum(popul),
+           total_lia_pop = sum(lia_pop),
+           total_la_pop = sum(la_pop),
+           perc_lia = round((total_lia_pop/total_pop)*100, digits = 0),
+           perc_la = round((total_la_pop/total_pop)*100, digits = 0),
+           mean_poverty = round(mean(poverty), digits = 0)) %>% 
+    select(-total_pop, -total_lia_pop, -total_la_pop, -la_pop, -lia_pop)
+
+joined <- left_join(obesity_2011, food_sum, by = "state")
 
 ```
 
