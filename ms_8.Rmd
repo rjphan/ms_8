@@ -195,7 +195,7 @@ food_lia <- food_access %>%
     mutate(perc = round(as.numeric(perc), digits = 0)) %>% 
     arrange(perc)
 
-# food_lia$perc =  paste(round(100*food_lia$perc, digits = 0), "%", sep="") 
+# Maybe could input the region in Shiny and people can play around with that?
 
 food_lia_plot <- food_lia %>% 
     group_by(region) %>% 
@@ -215,6 +215,10 @@ food_lia_plot <- food_lia %>%
 food_lia_plot
 
 ggsave("plots/food_lia_plot.png", plot = last_plot())
+
+```
+
+```{r join obesity and food access, include=FALSE}
 
 ```
 
