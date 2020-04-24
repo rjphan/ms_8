@@ -29,7 +29,7 @@ obesity_x <- read_csv("Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Ri
 
 # Food access data from https://www.ers.usda.gov/data-products/food-access-research-atlas/ (United States Department of Agriculture)
 
-food_access <- read_excel("Food Accessibility.xlsx", sheet = 3)
+food_access_x <- read_excel("Food Accessibility.xlsx", sheet = 3)
 
 # Rural income data from https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/ (United States Department of Agriculture)
 
@@ -58,7 +58,7 @@ obesity_x <- obesity_x %>%
 obesity <- obesity_x %>% 
     rename("state" = LocationAbbr,
            "year" = YearStart,
-           "bmi" = Data_Value,
+           "perc_obese" = Data_Value,
            "conf.low" = Low_Confidence_Limit,
            "conf.high" = High_Confidence_Limit,
            "sample_size" = Sample_Size,
@@ -69,29 +69,89 @@ obesity <- obesity_x %>%
            "race" = "Race/Ethnicity",
            "income" = Income) %>% 
     filter(class == "Obesity / Weight Status",
-           !is.na(bmi)) %>% 
+           !is.na(perc_obese)) %>% 
     select(-class)
+
+```
+
+```{r obesity mean plot, include=FALSE}
 
 obesity_mean <- obesity %>% 
     group_by(state, year) %>% 
-    summarise(mean_bmi = mean(bmi)) %>% 
+    summarise(mean_perc = mean(perc_obese)) %>% 
     filter(state != "US")
 
-plot_usmap(data = obesity_mean, values = "mean_bmi", color = "red", labels = FALSE) + 
-    scale_fill_continuous(name = "bmi") + 
+obesity_mean_plot <- plot_usmap(data = obesity_mean, values = "mean_perc", color = "red", labels = FALSE) +
     theme(legend.position = "right",
           plot.title = element_text(hjust = 0.5)) + 
-    scale_fill_continuous(low = "white", high = "red", name = "BMI") +
-    labs(title = "BMI in the US from 2011-2018",
-         subtitle = "BMI ",
+    scale_fill_continuous(low = "white", high = "red", name = "Percent Obese") +
+    labs(title = "Percent of Population (age 18+) Classified as Obese or Overweight in the US \n Year: {as.integer(frame_time)}",
+         subtitle = "Percent of population tends to increase as time goes on",
          caption = "Data from Center for Disease Control") +
     theme_void() +
     transition_time(year)
 
-View(obesity_mean)
+animate(obesity_mean_plot)
+
+anim_save("plots/obesity_mean_usmap.gif", plot = last_animation())
 
 ```
 
+```{r obesity by region}
+
+obesity_region <- obesity_mean %>% 
+    mutate(region = case_when(
+        state %in% c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA") ~ "Northeast",
+        state %in% c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD") ~ "Midwest",
+        state %in% c("DC", "DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", 
+                     "LA", "OK", "TX") ~ "South",
+        state %in% c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA") ~ "West")
+    ) %>% 
+    mutate(year = as.numeric(year)) %>% 
+  mutate(mean_perc = round(mean_perc, digits = 0))
+
+obesity_region_plot <- obesity_region %>% 
+    filter(!is.na(region)) %>%
+    ggplot(aes(color = region, x = year, y = mean_perc)) +
+    geom_jitter(aes(alpha = 0.1), show.legend = FALSE) +
+    theme_minimal() +
+    labs(title = "Percent of Population Classified as Obese or Overweight \n in US Over Time by Region",
+         caption = "Data from Center for Disease Control",
+         x = "Mean Percent of Population",
+         y = "Year",
+         color = "Region") +
+    geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
+    facet_wrap(~ region)
+obesity_region_plot
+    
+ggsave("plots/obesity_region_plot.png", plot = last_plot())
+
+```
+
+```{r clean food access data, include=FALSE}
+
+food_access_x <- food_access_x %>% 
+    select(State, County, Urban, POP2010, LILATracts_1And10, PovertyRate, MedianFamilyIncome, LA1and10, LAPOP1_10)
+
+food_access <- food_access_x %>% 
+    rename("state" = State,
+           "county" = County,
+           "popul" = POP2010,
+           "urban" = Urban,
+           "lia_1_10" = LILATracts_1And10,
+           "poverty_rate" = PovertyRate,
+           "med_income" = MedianFamilyIncome,
+           "la_1_10" = LA1and10,
+           "la_popul" = LAPOP1_10) %>% 
+    mutate(urban = as.factor(urban),
+           lia_1_10 = as.factor(lia_1_10),
+           la_1_10 = as.factor(la_1_10))
+
+food_access$state = state.abb[match(food_access$state, state.name)]
+
+View(food_access)
+
+```
 
 
 Shiny App
