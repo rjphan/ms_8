@@ -7,7 +7,6 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(tidyverse)
 library(janitor)
 library(readr)
 library(readxl)
@@ -19,6 +18,11 @@ library(usmap)
 library(maps)
 library(gganimate)
 library(scales)
+library(infer)
+library(broom)
+library(tidyverse)
+library(ggcorrplot)
+library(gt)
 ```
 
 
@@ -84,6 +88,8 @@ obesity_mean <- obesity %>%
     summarise(mean_perc = mean(perc_obese)) %>% 
     filter(state != "US")
 
+saveRDS(obesity_mean, file = "obesity_mean.RDS")
+
 obesity_mean_plot <- plot_usmap(data = obesity_mean, values = "mean_perc", color = "red", labels = FALSE) +
     theme(legend.position = "right",
           plot.title = element_text(hjust = 0.5)) + 
@@ -114,15 +120,19 @@ obesity_region <- obesity_mean %>%
     mutate(year = as.numeric(year)) %>% 
   mutate(mean_perc = round(mean_perc, digits = 0))
 
+saveRDS(obesity_region, file = "./obesity_shiny/data/obesity_region.RDS")
+
 obesity_region_plot <- obesity_region %>% 
     filter(!is.na(region)) %>%
     ggplot(aes(color = region, x = year, y = mean_perc)) +
     geom_jitter(aes(alpha = 0.1), show.legend = FALSE) +
+    theme(panel.grid.major.y = element_blank(),
+          panel.grid.minor.x = element_blank()) + 
     theme_minimal() +
     labs(title = "Percent of Population Classified as Obese or Overweight \n in US Over Time by Region",
          caption = "Data from Center for Disease Control",
-         x = "Mean Percent of Population",
-         y = "Year",
+         y = "Mean Percent of Population",
+         x = "Year",
          color = "Region") +
     geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
     facet_wrap(~ region)
@@ -166,6 +176,8 @@ food_access <- food_access_y %>%
     ) %>% 
     select(-county) 
 
+saveRDS(food_access, file = "./obesity_shiny/data/food_access.RDS")
+
 ```
 
 ```{r mean poverty by state, include = FALSE}
@@ -175,11 +187,13 @@ food_poverty_mean <- food_access %>%
     group_by(state) %>% 
     summarise(mean_poverty = mean(poverty))
 
+saveRDS(food_poverty_mean, file = "./obesity_shiny/data/food_poverty_mean.RDS")
+
 food_poverty_mean_plot <- plot_usmap(data = food_poverty_mean, values = "mean_poverty", 
-                                     color = "green", labels = FALSE) +
+                                     color = "white", labels = FALSE) +
     theme(legend.position = "right",
           plot.title = element_text(hjust = 0.5)) + 
-    scale_fill_continuous(low = "white", high = "green", name = "Mean Poverty Rate") +
+    scale_fill_continuous(low = "white", high = "blue", name = "Mean Poverty Rate") +
     labs(title = "Poverty Rate in the US",
          caption = "Data from US Department of Agriculture and 2010 Census Bureau") +
     theme_void()
@@ -198,6 +212,8 @@ food_lia <- food_access %>%
     mutate(perc = perc*100) %>% 
     mutate(perc = round(as.numeric(perc), digits = 0)) %>% 
     arrange(perc)
+
+saveRDS(food_lia, file = "./obesity_shiny/data/food_lia.RDS")
 
 # Maybe could input the region in Shiny and people can play around with that?
 
@@ -226,8 +242,6 @@ ggsave("plots/food_lia_plot.png", plot = last_plot())
 
 ```{r join obesity and food access, include=FALSE}
 
-# compare % of people that're obese to % of people that're lia and la
-
 obesity <- obesity %>% 
      mutate(region = case_when(
         state %in% c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA") ~ "Northeast",
@@ -255,59 +269,289 @@ food_sum <- food_access %>%
     summarise(mean_poverty = round(mean(poverty), digits = 0)) %>% 
     filter(!is.na(state))
 
-food_sum <- food_access %>% 
-    group_by(state, urban, lia_pop, la_pop, region) %>% 
-    summarise(total_pop = sum(popul),
-           total_lia_pop = sum(lia_pop),
-           total_la_pop = sum(la_pop),
-           perc_lia = round((total_lia_pop/total_pop)*100, digits = 0),
-           perc_la = round((total_la_pop/total_pop)*100, digits = 0),
-           mean_poverty = round(mean(poverty), digits = 0)) %>% 
-    select(-total_pop, -total_lia_pop, -total_la_pop, -la_pop, -lia_pop)
-
-joined <- left_join(obesity_2011, food_sum, by = "state")
+joined <- left_join(obesity_2011, food_sum, by = "state") %>% 
+    mutate(region = case_when(
+        state %in% c("CT", "MA", "ME", "NH", "RI", "VT", "NJ", "NY", "PA") ~ "Northeast",
+        state %in% c("IL", "IN", "MI", "OH", "WI", "IA", "KS", "MN", "MO", "NE", "ND", "SD") ~ "Midwest",
+        state %in% c("DC", "DE", "FL", "GA", "MD", "NC", "SC", "VA", "WV", "AL", "KY", "MS", "TN", "AR", 
+                     "LA", "OK", "TX") ~ "South",
+        state %in% c("AZ", "CO", "ID", "MT", "NV", "NM", "UT", "WY", "AK", "CA", "HI", "OR", "WA") ~ "West"),
+        urban = case_when(
+            urban == 0 ~ "urban",
+            urban == 1 ~ "rural")
+    ) 
 
 ```
 
+```{r relationship between obesity and different variables}
+
+sapply(joined, class)
+
+joined <- joined %>% 
+    ungroup() %>% 
+    mutate(age = as.factor(age),
+           gender = as.factor(gender),
+           race = as.factor(race),
+           urban = as.factor(urban),
+           region = as.factor(region))
+
+joined_cor <- joined %>% 
+    mutate("Obesity Rate" = mean_perc_obese,
+           "% Low Income and Food Access" = perc_lia,
+           "% Low Food Access" = perc_la,
+           "Poverty Rate" = mean_poverty) %>% 
+    select("Obesity Rate", "% Low Income and Food Access", "% Low Food Access", "Poverty Rate") %>% 
+    cor() 
+
+corrplot <- ggcorrplot(joined_cor, 
+             type = "upper", 
+             colors = c("blue", "white", "blue"),
+             lab = TRUE,
+             lab_size = 4,
+             lab_col = "black",
+             ggtheme = theme_void) +
+             labs(title = "Correlations Between Obesity, \n Poverty, and Food Access")  + 
+             theme(plot.title = element_text(hjust = 0.5, size = 15),
+                   legend.position = "none")
+
+ggsave("plots/corr_plot.png", plot = corrplot)
+
+```
+
+```{r gt}
+
+#yield a graph showing how the mean percentage of obesity is affected by different variables
+
+bootstrap_joined <- joined %>% 
+  rep_sample_n(size = 50, replace = TRUE, reps = 1000) %>% 
+  group_by(replicate)
+
+saveRDS(bootstrap_joined, file = "./obesity_shiny/data/bootstrap_joined.RDS")
+
+joined_lm_lia <- lm(mean_perc_obese ~ perc_lia, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_lia_gt <- joined_lm_lia %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Low Food Access and Low Income on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+gtsave(joined_lm_lia_gt, "lia_gt.html")
+
+joined_lm_gender <- lm(mean_perc_obese ~ gender, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_gender_gt <- joined_lm_gender %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Gender on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+gtsave(joined_lm_gender_gt, "gender_gt.html")
+
+joined_lm_age <- lm(mean_perc_obese ~ age, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+    select(term, estimate, conf.low, conf.high) %>% 
+    mutate(
+      estimate = round(estimate, digits = 3),
+      conf.low = round(conf.low, digits = 3),
+      conf.high = round(conf.high, digits = 4))
+
+joined_lm_age_gt <- joined_lm_age %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Age on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+  
+joined_lm_race <- lm(mean_perc_obese ~ race, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_race_gt <- joined_lm_race %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Race on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+joined_lm_la <- lm(mean_perc_obese ~ perc_la, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_la_gt <- joined_lm_la %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Low Food Access on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+joined_lm_urban <- lm(mean_perc_obese ~ urban, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_urban_gt <- joined_lm_urban %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Ruralness on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+joined_lm_mean_poverty <- lm(mean_perc_obese ~ mean_poverty, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_poverty_gt <- joined_lm_mean_poverty %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Poverty on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+joined_lm_region <- lm(mean_perc_obese ~ region, data = bootstrap_joined) %>% 
+  tidy(conf.int = TRUE) %>%
+  select(term, estimate, conf.low, conf.high) %>% 
+  mutate(
+    estimate = round(estimate, digits = 3),
+    conf.low = round(conf.low, digits = 3),
+    conf.high = round(conf.high, digits = 4))
+
+joined_lm_region_gt <- joined_lm_region %>% 
+  gt() %>% 
+  tab_header(
+    title = "Effect of Region in the US on Average Percentage of Obesity in a Population") %>%
+  cols_label(
+    term = "Variable", 
+    estimate = "Estimate",
+    conf.low = "Lower Bound",
+    conf.high = "Higher Bound") %>% 
+   tab_spanner(
+    label = "Data from 2010 Census Bureau, USDA, and CDC",
+    columns = vars(term, estimate, conf.low, conf.high))
+
+joined_poverty_obesity <- bootstrap_joined %>% 
+  ggplot(aes(x = mean_poverty, y = mean_perc_obese)) +
+  geom_jitter(aes(color = urban)) +
+  scale_color_manual(values = c("purple", "dark red")) +
+  theme_minimal() +
+  theme(panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank()) +
+  labs(title = "Poverty Rate on Obesity Rate",
+       caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+       color = "Ruralness",
+       x = "Mean Poverty Rate",
+       y = "Mean Obesity Rate") +
+  geom_smooth(method = "lm", color = "black")
+joined_poverty_obesity
+
+```
+
+An Introduction
+
+- Introduce the issue
+- Describe what obesity is 
+- Describe what food insecurity is
+
+Variables in question
+
+Obesity
+Obesity over time map
+Choose region to look at map
+The poverty map
+Should make a graph showing how poverty relates to obesity
+
+Food lia
+Could allow people to choose between which regions they want to compare
+
+Findings
+Correlation plot
+Make best fit line graphs for each variable that affects obesity and allow people to choose which one they want to look at
+Make a regression plot
+  Otherwise, gt tables?
+  
+Data
+Give process of creation of the data 
+Give sources 
+
+Me
+Self introdcution
+Provide links to github and linkedin 
 
 
-Shiny App
 
- fluidPage(
 
-    titlePanel("GOV1005 Final Project"),
-    
-    navlistPanel("Header A",
-                 tabPanel("Component 1"),
-                 "Header B",
-                 tabPanel("Component 3"),
-                 tabPanel("Component 4")
-    ),
 
-    sidebarLayout(position = "right",
-        sidebarPanel(img(src = "cartoon.png", height = 140, width = 200)),
-        mainPanel(h3("Red Meat Production in the US Over Time"),
-                  imageOutput("meat_clean_plot"),
-                  br(),
-                  br(),
-                  br(),
-                  br(),
-                  br(),
-                  br(),
-                  actionButton("action", "Click")
-    )
-)
 
-)
 
-# Define server logic required to draw a histogram
-server <- function(input, output) {
-    
-    output$meat_clean_plot <- renderImage({
-        list(src = "meat_clean_plot.png",
-             contentType = 'image/png',
-             width = 550,
-             height = 500)},
-        deleteFile = FALSE
-    )  
-}
+
