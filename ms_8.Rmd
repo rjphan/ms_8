@@ -23,6 +23,7 @@ library(broom)
 library(tidyverse)
 library(ggcorrplot)
 library(gt)
+library(webshot)
 ```
 
 
@@ -197,7 +198,6 @@ food_poverty_mean_plot <- plot_usmap(data = food_poverty_mean, values = "mean_po
     labs(title = "Poverty Rate in the US",
          caption = "Data from US Department of Agriculture and 2010 Census Bureau") +
     theme_void()
-food_poverty_mean_plot
 
 ggsave("plots/food_poverty_plot.png", plot = last_plot())
 
@@ -294,6 +294,7 @@ joined <- joined %>%
            race = as.factor(race),
            urban = as.factor(urban),
            region = as.factor(region))
+saveRDS(joined, file = "./obesity_shiny/data/joined.RDS")
 
 joined_cor <- joined %>% 
     mutate("Obesity Rate" = mean_perc_obese,
@@ -302,6 +303,8 @@ joined_cor <- joined %>%
            "Poverty Rate" = mean_poverty) %>% 
     select("Obesity Rate", "% Low Income and Food Access", "% Low Food Access", "Poverty Rate") %>% 
     cor() 
+
+saveRDS(joined_cor, file = "./obesity_shiny/data/joined_cor.RDS")
 
 corrplot <- ggcorrplot(joined_cor, 
              type = "upper", 
@@ -349,7 +352,7 @@ joined_lm_lia_gt <- joined_lm_lia %>%
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
 
-gtsave(joined_lm_lia_gt, "lia_gt.html")
+gtsave(joined_lm_lia_gt, "lia_gt.png")
 
 joined_lm_gender <- lm(mean_perc_obese ~ gender, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
@@ -513,7 +516,20 @@ joined_poverty_obesity <- bootstrap_joined %>%
        x = "Mean Poverty Rate",
        y = "Mean Obesity Rate") +
   geom_smooth(method = "lm", color = "black")
-joined_poverty_obesity
+
+joined_demo <- bootstrap_joined %>% 
+  ggplot(aes(x = age, y = mean_perc_obese, color = age)) +
+  geom_jitter() +
+  theme_minimal() +
+  theme(panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.text.x = element_text(angle = 35, hjust = 1)) +
+  labs(title = "Poverty Rate on Obesity Rate",
+       caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+       color = "Ruralness",
+       x = "Mean Poverty Rate",
+       y = "Mean Obesity Rate")
+joined_demo
 
 ```
 
@@ -531,8 +547,11 @@ Choose region to look at map
 The poverty map
 Should make a graph showing how poverty relates to obesity
 
+Food Access
 Food lia
 Could allow people to choose between which regions they want to compare
+Food lia us map
+Allow people to choose between lia and la
 
 Findings
 Correlation plot
