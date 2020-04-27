@@ -43,19 +43,19 @@ food_access_x <- read_excel("Food Accessibility.xlsx", sheet = 3)
 
 # Read in rural income data from
 # https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/
-# (United States Department of Agriculture)
+# (United States Department of Agriculture). Might not use it.
 
 rural_income <- read_csv("Rural Atlas Data/Income.csv")
 
 # Read in income data for all US Counties from
 # https://www.ers.usda.gov/data-products/county-level-data-sets/download-data/
-# (US Bureau of Labour Statistics)
+# (US Bureau of Labour Statistics). Might not use it.
 
 income <- read_excel("Unemployment.xls", skip = 4)
 
-# REad in consumer Price Index ata from
+# Read in consumer Price Index ata from
 # https://www.ers.usda.gov/data-products/food-price-outlook/ (United States
-# Department of Agriculture)
+# Department of Agriculture). Might not use it.
 
 cpi <- read_excel("historicalcpi.xlsx", skip = 1)
 
@@ -127,7 +127,7 @@ obesity_mean_plot <- plot_usmap(data = obesity_mean, values = "mean_perc", color
 
 animate(obesity_mean_plot)
 
-anim_save("plots/obesity_mean_usmap.gif", plot = last_animation())
+anim_save("obesity_shiny/plots/obesity_mean_usmap.gif", plot = last_animation())
 
 ```
 
@@ -168,7 +168,7 @@ obesity_region_plot <- obesity_region %>%
     geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
     facet_wrap(~ region)
     
-ggsave("plots/obesity_region_plot.png", plot = last_plot())
+ggsave("obesity_shiny/plots/obesity_region_plot.png", plot = last_plot())
 
 ```
 
@@ -242,7 +242,7 @@ food_poverty_mean_plot <- plot_usmap(data = food_poverty_mean, values = "mean_po
          caption = "Data from US Department of Agriculture and 2010 Census Bureau") +
     theme_void()
 
-ggsave("plots/food_poverty_plot.png", plot = last_plot())
+ggsave("obesity_shiny/plots/food_poverty_plot.png", plot = last_plot())
 
 ```
 
@@ -291,7 +291,7 @@ food_lia_plot <- food_lia %>%
          fill = "Region") +
     geom_text(aes(label = perc), hjust = -0.3, size = 2)
 
-ggsave("plots/food_lia_plot.png", plot = last_plot())
+ggsave("obesity_shiny/plots/food_lia_plot.png", plot = last_plot())
 
 ```
 
@@ -344,6 +344,8 @@ food_sum <- food_access %>%
     group_by(state, perc_lia, perc_la, urban) %>% 
     summarise(mean_poverty = round(mean(poverty), digits = 0)) %>% 
     filter(!is.na(state))
+
+saveRDS(food_sum, file = "./obesity_shiny/data/food_sum.RDS")
 
 joined <- left_join(obesity_2011, food_sum, by = "state") %>% 
     mutate(region = case_when(
@@ -402,7 +404,7 @@ corrplot <- ggcorrplot(joined_cor,
              theme(plot.title = element_text(hjust = 0.5, size = 15),
                    legend.position = "none")
 
-ggsave("plots/corr_plot.png", plot = corrplot)
+ggsave("obesity_shiny/plots/corr_plot.png", plot = corrplot)
 
 ```
 
@@ -495,6 +497,8 @@ joined_lm_age_gt <- joined_lm_age %>%
    tab_spanner(
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
+
+gtsave(joined_lm_age_gt, "age_gt.html")
   
 joined_lm_race <- lm(mean_perc_obese ~ race, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
@@ -517,6 +521,8 @@ joined_lm_race_gt <- joined_lm_race %>%
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
 
+gtsave(joined_lm_race_gt, "gender_race.html")
+
 joined_lm_la <- lm(mean_perc_obese ~ perc_la, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
   select(term, estimate, conf.low, conf.high) %>% 
@@ -537,6 +543,8 @@ joined_lm_la_gt <- joined_lm_la %>%
    tab_spanner(
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
+
+gtsave(joined_lm_la_gt, "la_gt.html")
 
 joined_lm_urban <- lm(mean_perc_obese ~ urban, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
@@ -559,6 +567,8 @@ joined_lm_urban_gt <- joined_lm_urban %>%
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
 
+gtsave(joined_lm_urban_gt, "urban_gt.html")
+
 joined_lm_mean_poverty <- lm(mean_perc_obese ~ mean_poverty, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
   select(term, estimate, conf.low, conf.high) %>% 
@@ -580,6 +590,8 @@ joined_lm_poverty_gt <- joined_lm_mean_poverty %>%
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
 
+gtsave(joined_lm_poverty_gt, "poverty_gt.html")
+
 joined_lm_region <- lm(mean_perc_obese ~ region, data = bootstrap_joined) %>% 
   tidy(conf.int = TRUE) %>%
   select(term, estimate, conf.low, conf.high) %>% 
@@ -600,9 +612,21 @@ joined_lm_region_gt <- joined_lm_region %>%
    tab_spanner(
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
+
+gtsave(joined_lm_region_gt, "region_gt.html")
+
 ```
 
 ```{r poverty and obesity relationship graph}
+
+# Because there wasn't really any correlation between food access and obesity, I
+# thought I'd look at how obesity is affected by poverty. I created a
+# scatterplot to reflect that, and choose geom_jitter since many points
+# overlapped. Then I drew a best fit line. For the Shiny app, I want to see how
+# the different variables affect the mean obesity rate, so I thought I would
+# create graphs reflecting each variable. Having x = age is just a sample of my
+# code to see if it works, and then I'll allow the user to choose the x variable
+# in the Shiny app. Then I saved the plot using ggsave.
 
 joined_poverty_obesity <- bootstrap_joined %>% 
   ggplot(aes(x = mean_poverty, y = mean_perc_obese)) +
@@ -618,6 +642,8 @@ joined_poverty_obesity <- bootstrap_joined %>%
        y = "Mean Obesity Rate") +
   geom_smooth(method = "lm", color = "black")
 
+ggsave("obesity_shiny/plots/poverty_obesity_plot.png", plot = last_plot())
+
 joined_demo <- bootstrap_joined %>% 
   ggplot(aes(x = age, y = mean_perc_obese, color = age)) +
   geom_jitter() +
@@ -632,6 +658,45 @@ joined_demo <- bootstrap_joined %>%
        y = "Mean Obesity Rate")
 
 ```
+
+
+```{r food access us map}
+
+# I wanted to plot onto a US map food insecurity, so I used plot_usmap. Then I saved it.
+
+lia_usmap <- plot_usmap(data = food_sum, values = "perc_lia", color = "dark green", labels = FALSE) +
+    theme(legend.position = "right",
+          plot.title = element_text(hjust = 0.5)) + 
+    scale_fill_continuous(low = "white", high = "dark green", name = "Percent of Population") +
+    labs(title = "Percent of Population (age 18+) Classified as Having Low Income and Low Food Access",
+         caption = "Data from USDA and 2010 Census Bureau") +
+    theme_void()
+
+ggsave("obesity_shiny/plots/lia_usmap.png", plot = last_plot())
+
+```
+
+```{r poverty and food access plot}
+
+# I wanted to find the relationship between poverty and food insecurity
+# depending on ruralness, so I graphed it. Then I saved it.
+
+poverty_lia_chart <- bootstrap_joined %>% 
+  ggplot(aes(x = mean_poverty, y = perc_lia)) +
+      geom_jitter(color = "dark green") +
+      theme_minimal() +
+      theme(panel.grid.minor.y = element_blank(),
+            panel.grid.minor.x = element_blank()) +
+       labs(title = "Relationship Between Poverty Rate and Low Income and Low Food Access",
+            caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+            x = "Mean Poverty Rate",
+            y = "Percent of Population Classified as \n Having Low Income and Low Food Access") +
+       geom_smooth(method = "lm", color = "green")
+
+ggsave("obesity_shiny/plots/poverty_lia_chart.png", plot = last_plot())
+
+```
+
 
 An Introduction
 

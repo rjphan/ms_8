@@ -15,6 +15,7 @@ library(ggplot2)
 library(usmap)
 library(shinyWidgets)
 library(ggcorrplot)
+library(usmap)
 
 # read in data from RDS
 
@@ -23,13 +24,8 @@ joined_cor <- readRDS("data/joined_cor.RDS")
 bootstrap_joined <- readRDS("data/bootstrap_joined.RDS")
 joined <- readRDS("data/joined.RDS")
 food_poverty_mean <- readRDS("data/food_poverty_mean.RDS")
-
-bootstrap_joined <- bootstrap_joined %>%
-    mutate(age = as.factor(age),
-           gender = as.factor(gender),
-           race = as.factor(race),
-           urban = as.factor(urban))
-# filter(!is.na(input$demographic))
+food_sum <- readRDS("data/food_sum.RDS")
+food_lia <- readRDS("data/food_lia.RDS")
 
 # ui code
 
@@ -205,7 +201,8 @@ ui <- navbarPage(
                         br(),
                         
                         selectInput("urban", tags$b("Ruralness:"),
-                                    choices = c("urban", "rural"),
+                                    choices = c("Urban" = "urban", 
+                                                "Rural" = "rural"),
                                     multiple = FALSE)
                         
                     ),
@@ -237,8 +234,101 @@ ui <- navbarPage(
                )
                )),
                
-                tabPanel("Food Access"
+                tabPanel("Food Access",
+                         
+                    tabsetPanel(
+                        tabPanel("The United States",
+                                 
+                                 br(),
+                                 
+                                 fluidRow(
+                                     column(3),
+                                     
+                                     column(6,
+                                            
+                                            br(),
+                                            
+                                            h3("Food Insecurity in the US", style = "color: darkgreen; text-align: center"),
+                                            
+                                            br(),
+                                            
+                                            p("Given the map on the US's increasing obesity rates overtime (under the 'The United States' tab), 
+                                       I thought it would be nice to compare a map that examines the US's food insecurities as well. 
+                                       Looking at the two maps together, it is interesting to see which states have darker colors on both. 
+                                       Which states seem to correlate in the obesity rate map and the food insecurity map?"),
+                                     
+                                 )),
+                        
+                             fluidRow(
+                                imageOutput("lia_usmap")
                         )
+                        ),
+                        
+                        tabPanel("States",
+                                 
+                                 br(),
+                                 br(),
+                                 
+                                 sidebarLayout(
+                                     sidebarPanel(column(3),
+                                                  
+                                                  h3("Food Insecurity Across States", style = "color: darkgreen"),
+                                                  
+                                                  br(),
+                                                  
+                                                  p("description"),
+                                                  
+                                     ),
+                                     
+                                     mainPanel(
+                                         plotOutput("lia_states")
+                                     )
+                                 )     
+                                 
+                                 ),
+                        
+                        tabPanel("Poverty",
+                                 
+                                 br(),
+                                 br(),
+                            
+                             sidebarLayout(
+                                 sidebarPanel(column(3),
+                                              
+                                              h3("Poverty in the US and Food Insecurity", style = "color: darkgreen"),
+                                              
+                                              br(),
+                                              
+                                              p("I was curious how poverty can affect food insecurity as well,
+                                              and how that may depend on the ruralness of the area you live in.
+                                              It appears from the differences in the urban and rural graphs that 
+                                                being impoverished in a rural area means a stronger positive relationship with having
+                                                low food access, more so than being impoverished in an urban area."),
+                                              
+                                              br(),
+                                              
+                                              p(tags$em("When choosing the different ruralness options, the graph may take quite a while to 
+                                                        load. Thanks for your patience.")),
+                                              
+                                              br(),
+                                              
+                                              selectInput("urban", tags$b("Ruralness:"),
+                                                          choices = c("Urban" = "urban", 
+                                                                      "Rural" = "rural"),
+                                                          multiple = FALSE)
+                                              
+                                 ),
+                                 
+                                 mainPanel(
+                                     plotOutput("poverty_lia_plot")
+                                 )
+                             )
+                             )    
+                            
+                                 )
+                        
+                        )
+                    
 ),
     
     tabPanel("Findings",
@@ -298,8 +388,7 @@ ui <- navbarPage(
                                             choices = c("Gender" = "gender", 
                                                         "Age" = "age", 
                                                         "Race" = "race", 
-                                                        "Ruralness" = "urban"),
-                                            multiple = FALSE),
+                                                        "Ruralness" = "urban")),
                             ),
                             
                             mainPanel(
@@ -417,8 +506,8 @@ server <- function(input, output) {
     output$obesity_usmap <- renderImage({
         list(src = "./plots/obesity_mean_usmap.gif",
              contentType = 'image/gif',
-             height = 600,
-             width = 600,
+             height = 650,
+             width = 650,
              style = "display: block; margin-left: auto; margin-right: auto;")}, 
         deleteFile = FALSE)
     
@@ -456,7 +545,7 @@ server <- function(input, output) {
             theme(panel.grid.minor.y = element_blank(),
                   panel.grid.minor.x = element_blank()) +
             labs(title = "Poverty Rate on Obesity Rate",
-                 caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+                 caption = "Data from US Department of Agriculture, 2010 Census Bureau, \n and Center for Disease Control",
                  x = "Mean Poverty Rate",
                  y = "Mean Obesity Rate") +
             geom_smooth(method = "lm", color = "blue")
@@ -471,6 +560,54 @@ server <- function(input, output) {
             labs(title = "Poverty Rate in the US",
                  caption = "Data from US Department of Agriculture and 2010 Census Bureau") +
             theme_void()
+    })
+    
+    output$lia_usmap <- renderImage({
+        list(src = './plots/lia_usmap.png', 
+             height = 650,
+             width = 650,
+             style = "display: block; margin-left: auto; margin-right: auto;")
+    }, deleteFile = FALSE)
+    
+    output$lia_states <- renderPlot({
+        food_lia <- food_lia %>% 
+            group_by(region)
+        
+        ggplot(data = food_lia, aes(y = reorder(state, perc), x = perc, fill = region)) +
+            geom_col() +
+            theme_minimal() +
+            theme(title = element_text(size = 15),
+                  axis.text.y = element_text(hjust = 1, size = 13),
+                  panel.grid.major.y = element_line(color = "white"),
+                  panel.grid.minor.y = element_line(color = "white"),
+                  plot.subtitle = element_text(size = 12)) +
+            labs(title = "Percent of Counties with a Lack of Food Access and Low Income Population",
+                 subtitle = "Lack of Food Access Defined by 33% of the Population Living More Than 1 Mile (Urban) 
+                 Or 10 Miles (Rural) Away from Supermarket, Supercenter, or Grocery Store Who are Low Income",
+                 caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+                 x = "Percent of Counties",
+                 y = "State",
+                 fill = "Region") +
+            geom_text(aes(label = perc), hjust = -0.3, size = 4)
+        
+    },
+    width = 940,
+    height = 750)
+    
+    output$poverty_lia_plot <- renderPlot({
+        bootstrap_joined <- bootstrap_joined %>% 
+            filter(urban == input$urban)
+        
+        ggplot(data = bootstrap_joined, aes(x = mean_poverty, y = perc_lia)) +
+            geom_jitter(color = "dark green") +
+            theme_minimal() +
+            theme(panel.grid.minor.y = element_blank(),
+                  panel.grid.minor.x = element_blank()) +
+            labs(title = "Relationship Between Poverty Rate and Low Income and Low Food Access",
+                 caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+                 x = "Mean Poverty Rate",
+                 y = "Percent of Population Classified as \n Having Low Income and Low Food Access") +
+            geom_smooth(method = "lm", color = "green")
     })
     
     output$corr <- renderPlot({
@@ -493,8 +630,8 @@ server <- function(input, output) {
         mutate(age = as.factor(age),
                gender = as.factor(gender),
                race = as.factor(race),
-               urban = as.factor(urban))
-        # filter(!is.na(input$demographic))
+               urban = as.factor(urban)) %>% 
+        filter(!is.na(input$demographic))
 
         new_xaxis_label <- if(input$demographic == "age"){
             print("Age")
@@ -508,35 +645,45 @@ server <- function(input, output) {
 
         new_yaxis_label <- if(input$yvariable == "perc_lia"){
             print("Mean % of Population Classified as Low Income and Low Food Access")
-        } else if(input$demographic == "perc_la"){
+        } else if(input$yvariable == "perc_la"){
             print("Mean % of Population Classified as Low Food Access")
-        } else if(input$demographic == "mean_perc_obese"){
+        } else if(input$yvariable == "mean_perc_obese"){
             print("Mean % of Population Classified as Obese or Overweight")
         }
-
-        ggplot(data = bootstrap_joined, aes(x = input$demographic, y = mean_perc_obese, color = input$demographic)) +
-            geom_jitter() +
-            theme_minimal() +
-            theme(panel.grid.minor.y = element_blank(),
-                  panel.grid.minor.x = element_blank(),
-                  axis.text.x = element_text(angle = 35, hjust = 1))
-            # labs(title = paste("Relationship Between ", input$demographic, " and ", input$yvariable, "", sep = ""),
-            #      caption = "Data from US Department of Agriculture and 2010 Census Bureau",
-            #      color = "Ruralness",
-                 # x = new_xaxis_label,
-                 # y = new_yaxis_label)
         
-        # ggplot(data = bootstrap_joined, aes(x = gender, y = mean_perc_obese, color = gender)) +
+        new_legend_label <- if(input$demographic == "age"){
+            print("Age")
+        } else if(input$demographic == "gender"){
+            print("Gender")
+        } else if(input$demographic == "race"){
+            print("Race")
+        } else if(input$demographics == "urban"){
+            print("Ruralness")
+        }
+
+        # ggplot(data = bootstrap_joined, aes(x = input$demographic, y = mean_perc_obese, color = input$demographic)) +
         #     geom_jitter() +
         #     theme_minimal() +
         #     theme(panel.grid.minor.y = element_blank(),
         #           panel.grid.minor.x = element_blank(),
         #           axis.text.x = element_text(angle = 35, hjust = 1)) +
-        #     labs(title = "Poverty Rate on Obesity Rate",
+        #     labs(title = paste("Relationship Between ", input$demographic, " and ", input$yvariable, "", sep = ""),
         #          caption = "Data from US Department of Agriculture and 2010 Census Bureau",
-        #          color = "Ruralness",
-        #          x = "Mean Poverty Rate",
-        #          y = "Mean Obesity Rate")
+        #          color = new_legend_label,
+        #     x = new_xaxis_label,
+        #     y = new_yaxis_label)
+        
+        ggplot(data = bootstrap_joined, aes(x = age, y = mean_perc_obese, color = age)) +
+            geom_jitter() +
+            theme_minimal() +
+            theme(panel.grid.minor.y = element_blank(),
+                  panel.grid.minor.x = element_blank(),
+                  axis.text.x = element_text(angle = 35, hjust = 1)) +
+            labs(title = paste("Relationship Between ", new_xaxis_label, " and ", new_yaxis_label, "", sep = ""),
+                 caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+                 color = new_legend_label,
+                 x = new_xaxis_label,
+                 y = new_yaxis_label)
         
     })
     
@@ -565,7 +712,7 @@ server <- function(input, output) {
 # Run the application 
 shinyApp(ui = ui, server = server)
 
-# Ask about ask about factor graph, ask about why when I publish, the graph don't show up properly, ask about regression, ask 
-# about gt HTML
+# Ask about ask about factor graph (yvariable, demographic, filter out NAs), ask about regression, ask 
+# about gt HTML, whu poverty for urban/rural in food access doesn't change
 
 
