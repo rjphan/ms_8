@@ -29,33 +29,49 @@ library(webshot)
 
 ```{r loading data, include=FALSE}
 
-# Obesity data from https://chronicdata.cdc.gov/Nutrition-Physical-Activity-and-Obesity/Nutrition-Physical-Activity-and-Obesity-Behavioral/hn4x-zwk7/data (Center for Disease Control)
+# Read in obesity data from
+# https://chronicdata.cdc.gov/Nutrition-Physical-Activity-and-Obesity/Nutrition-Physical-Activity-and-Obesity-Behavioral/hn4x-zwk7/data
+# (Center for Disease Control)
 
 obesity_x <- read_csv("Nutrition__Physical_Activity__and_Obesity_-_Behavioral_Risk_Factor_Surveillance_System.csv")
 
-# Food access data from https://www.ers.usda.gov/data-products/food-access-research-atlas/ (United States Department of Agriculture)
+# Read in food access data from
+# https://www.ers.usda.gov/data-products/food-access-research-atlas/ (United
+# States Department of Agriculture)
 
 food_access_x <- read_excel("Food Accessibility.xlsx", sheet = 3)
 
-# Rural income data from https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/ (United States Department of Agriculture)
+# Read in rural income data from
+# https://www.ers.usda.gov/data-products/atlas-of-rural-and-small-town-america/
+# (United States Department of Agriculture)
 
 rural_income <- read_csv("Rural Atlas Data/Income.csv")
 
-# Income data for all US Counties from https://www.ers.usda.gov/data-products/county-level-data-sets/download-data/ (US Bureau of Labour Statistics)
+# Read in income data for all US Counties from
+# https://www.ers.usda.gov/data-products/county-level-data-sets/download-data/
+# (US Bureau of Labour Statistics)
 
 income <- read_excel("Unemployment.xls", skip = 4)
 
-# Consumer Price Index ata from https://www.ers.usda.gov/data-products/food-price-outlook/ (United States Department of Agriculture)
+# REad in consumer Price Index ata from
+# https://www.ers.usda.gov/data-products/food-price-outlook/ (United States
+# Department of Agriculture)
 
 cpi <- read_excel("historicalcpi.xlsx", skip = 1)
 
-# What I want to observe here is how different variables affect obesity in the US - income, food accessibility, year, ethnicity, food price, which users can choose from when they pick the graph. Then I want to map out obesity/BMI onto a map of the US. I 
-
-# If obesity is affected by food access, then can look deeper into food access. How does ruralness affect food access? How do consumer food price indexes affect food accessibility? How does SNAP policy affect food access (can look at SNAP data from USDA: https://www.ers.usda.gov/data-products/snap-policy-data-sets/).
+# Notes for myself: If obesity is affected by food access, then can look deeper
+# into food access. How does ruralness affect food access? How do consumer food
+# price indexes affect food accessibility? How does SNAP policy affect food
+# access (can look at SNAP data from USDA:
+# https://www.ers.usda.gov/data-products/snap-policy-data-sets/).
 
 ```
 
 ```{r clean obesity data, include=FALSE}
+
+# There are a lot of variables that I don't want, so I selected for the ones I
+# do. Then I renamed the variables so they made sense to me. I only want data
+# pertaining to obesity, so I filtered for that and took out the NAs.
 
 obesity_x <- obesity_x %>% 
     select(YearStart, LocationAbbr, Class, Data_Value, Low_Confidence_Limit, High_Confidence_Limit,
@@ -82,7 +98,14 @@ obesity <- obesity_x %>%
 
 ```{r obesity mean by year, include=FALSE}
 
-# Maybe choose a state to look at its obesity rate change over time
+# There are a lot of observations for each state in my data, but I only want the
+# mean percent obesity for each state, so that means one observation for each
+# state. I can do so by summarising my data into a mean percentage of obesity
+# for each state. I only want the states, so I filtered out the US observation.
+# I then saved it to an RDS file to load in Shiny later. Now I want to make a
+# plot that shows the mean percentage of obesity over time on the US map, so I
+# used plot_usmap and then gganimate. scale_fill_continuous lets me choose the
+# legend colours I want. Then I saved it as a file using anim_save.
 
 obesity_mean <- obesity %>% 
     group_by(state, year) %>% 
@@ -109,6 +132,13 @@ anim_save("plots/obesity_mean_usmap.gif", plot = last_animation())
 ```
 
 ```{r obesity by region, include=FALSE}
+
+# I want to group the states by the region of the US they're in, so I used as
+# when. I noticed that year wasn't a numeric variable, so I made it one. Then I
+# rounded the mean percentages of obesity. I wanted to plot the obesity rate by
+# region next. I used geom_jitter because of lot of plot points overlapped. I
+# put in a line of best fit using geom_smooth. I then used ggsave to save my
+# plot as a file.
 
 obesity_region <- obesity_mean %>% 
     mutate(region = case_when(
@@ -137,14 +167,21 @@ obesity_region_plot <- obesity_region %>%
          color = "Region") +
     geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
     facet_wrap(~ region)
-
-obesity_region_plot
     
 ggsave("plots/obesity_region_plot.png", plot = last_plot())
 
 ```
 
 ```{r clean food access data, include=FALSE}
+
+# There are a lot of variables that I don't want, so I selected for the ones I
+# do. Then I renamed the variables so they made sense to me. Then I made sure
+# that the variables I want to be factors are factors using mutate. In order to
+# join the data together late by state, I made sure that the states are
+# abbreviated like in the obesity data. I did this using state.abb, which
+# matched the full state names in my dataset to state.names in the base R (I
+# think it's base R). Then I used case_when to group the states into regions. I
+# then saved my data as an RDS file to load into Shiny later.
 
 food_access_x <- food_access_x %>% 
     select(State, County, Urban, POP2010, LILATracts_1And10, PovertyRate, MedianFamilyIncome, 
@@ -183,6 +220,12 @@ saveRDS(food_access, file = "./obesity_shiny/data/food_access.RDS")
 
 ```{r mean poverty by state, include = FALSE}
 
+# I want to make a graph based on the mean poverty of each states. I filtered
+# for regions that were not a state and thus yielded NA for region (meaning
+# places like Puerto Rico, Guam, the Virgin Islands, DC, and the US as a whole).
+# I then plotted that data using plot_usmap onto a US map based on state. I then
+# saved that plot using ggsave.
+
 food_poverty_mean <- food_access %>%
     filter(!is.na(region)) %>% 
     group_by(state) %>% 
@@ -205,6 +248,20 @@ ggsave("plots/food_poverty_plot.png", plot = last_plot())
 
 ```{r food access lia distribution, include=FALSE}
 
+# Now I wanted to make a graph based on food access (low income and low food
+# acess). Again, I had a lot of observations per state. I decided to find the
+# percentage of counties in the state that were considered low income and low
+# food access (denoted as a 1 for lia_1_10), so I summed up the total and
+# divided by the number of counties in the state, yielding the percentage of
+# counties in the state that were classified as having 33% or more of its
+# population with low income and low access to food. I changed that to a numeric
+# variable and rounded, arranging from the lowest percentage to the highest. I
+# saved that data into an RDS file. Then I plotted it using geom_col. To reorder
+# the columns from highest to lowest, I used the reorder function. I had the
+# percentage as the x variable rather than the y, even though it is the
+# dependent variable, because I wanted the graph to be flipped since it looked
+# nicer that way. Then I colored the bars by the region. I then saved the graph.
+
 food_lia <- food_access %>%
     filter(!is.na(region)) %>% 
     group_by(state, region) %>% 
@@ -214,8 +271,6 @@ food_lia <- food_access %>%
     arrange(perc)
 
 saveRDS(food_lia, file = "./obesity_shiny/data/food_lia.RDS")
-
-# Maybe could input the region in Shiny and people can play around with that?
 
 food_lia_plot <- food_lia %>% 
     group_by(region) %>% 
@@ -227,20 +282,41 @@ food_lia_plot <- food_lia %>%
           panel.grid.minor.y = element_line(color = "white"),
           plot.subtitle = element_text(size = 8)) +
     labs(title = "Percent of Counties with a Lack of Food Access and Low Income Population",
-         subtitle = "Lack of Food Access Defined by 33% of the Population Living More Than \n 1 Mile (Urban) Or 10 Miles (Rural) Away from Supermarket, Supercenter, or Grocery Store Who are Low Income",
+         subtitle = "Lack of Food Access Defined by 33% of the Population 
+                     Living More Than \n 1 Mile (Urban) Or 10 Miles (Rural) Away from Supermarket, 
+                     Supercenter, or Grocery Store Who are Low Income",
          caption = "Data from US Department of Agriculture and 2010 Census Bureau",
          x = "Percent of Counties",
          y = "State",
          fill = "Region") +
     geom_text(aes(label = perc), hjust = -0.3, size = 2)
 
-food_lia_plot
-
 ggsave("plots/food_lia_plot.png", plot = last_plot())
 
 ```
 
 ```{r join obesity and food access, include=FALSE}
+
+# Although I had used case_when to group the states into regions, I had saved
+# that into a different object, so I just did it again t save into the overall
+# obesity dataset. I wanted to join the datasets next. However, obesity
+# originally had a lot of observations based on one state instead of just one
+# observation based on one state each time, so I used summarise to take the mean
+# observations of obesity rates for each state to get it down to just one
+# observation per state. I tried using mutate,  but that kept all the
+# observations intact and just created a new column. Using summarise allowed me
+# to get rid of all the observations I didn't want and just return the mean
+# observation. By grouping by state, age, gender, income, and race, I was able
+# to keep those variables after the summarise. I then filtered for what I didn't
+# want. I then wanted to clean the food_access data before joining. I wanted the
+# percentage of the population in each state (out of the sample size) that was
+# either low income and low food access or just low food access overall, so I
+# summed up the total populations and then use that to divide the sum of the low
+# income and low food access population and the low food access population by. I
+# then used a left join to join the data together (didn't matter which join I
+# used since all the observations matched anyway) and used case_when for region
+# again since I had forgotten to include that before. Then I changed the urban
+# values into values I understood using case_when.
 
 obesity <- obesity %>% 
      mutate(region = case_when(
@@ -285,6 +361,14 @@ joined <- left_join(obesity_2011, food_sum, by = "state") %>%
 
 ```{r relationship between obesity and different variables}
 
+# I used sapply to look at the class of each variable of joined, and changed the
+# variables to the class I wanted. I saved that data into an RDS file. Now I
+# want a graph that shows the correlation between multiple variables, so I
+# mutated the names to make sense when they showed up on the graph. I selected
+# for the variables to pipe into cor(). Then I saved that data into an RDS file.
+# I made a correlation plot using the correlation matrix and saved that using
+# ggsave.
+
 sapply(joined, class)
 
 joined <- joined %>% 
@@ -294,6 +378,7 @@ joined <- joined %>%
            race = as.factor(race),
            urban = as.factor(urban),
            region = as.factor(region))
+
 saveRDS(joined, file = "./obesity_shiny/data/joined.RDS")
 
 joined_cor <- joined %>% 
@@ -323,7 +408,20 @@ ggsave("plots/corr_plot.png", plot = corrplot)
 
 ```{r gt}
 
-#yield a graph showing how the mean percentage of obesity is affected by different variables
+# Because my data only had 10,000 observations, I wanted to sample my data
+# multiple times again, so I used a bootstrap sampling to get 50,000
+# observations. I saved that data into an RDS file. Since it turns out that
+# there isn't much correlation between food access and obesity, I wanted to find
+# linear regression models for each of my variables and see how how they relate
+# to obesity and they might predict obesity. I did that for low income and low
+# food access, low food access, gender, age, race, poverty, region, and
+# ruralness. Unfortunately, I was unable to map the linear models onto all of my
+# data (there was an error that my object was a double instead of 1, which my
+# CAs also seemed unable to fix during study halls) so I decided to just keep
+# the regression just to my boostrapped data. Then I put the values into gt
+# tables, and will explain what they mean on the Shiny app. In the future, I may
+# also do a regression for all the variables at once after looking at the
+# relationship to obesity. I saved each of the gt tables into an html file.
 
 bootstrap_joined <- joined %>% 
   rep_sample_n(size = 50, replace = TRUE, reps = 1000) %>% 
@@ -502,6 +600,9 @@ joined_lm_region_gt <- joined_lm_region %>%
    tab_spanner(
     label = "Data from 2010 Census Bureau, USDA, and CDC",
     columns = vars(term, estimate, conf.low, conf.high))
+```
+
+```{r poverty and obesity relationship graph}
 
 joined_poverty_obesity <- bootstrap_joined %>% 
   ggplot(aes(x = mean_poverty, y = mean_perc_obese)) +
@@ -529,7 +630,6 @@ joined_demo <- bootstrap_joined %>%
        color = "Ruralness",
        x = "Mean Poverty Rate",
        y = "Mean Obesity Rate")
-joined_demo
 
 ```
 

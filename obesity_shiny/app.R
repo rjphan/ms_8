@@ -14,6 +14,7 @@ library(tidyverse)
 library(ggplot2)
 library(usmap)
 library(shinyWidgets)
+library(ggcorrplot)
 
 # read in data from RDS
 
@@ -21,6 +22,14 @@ obesity_region <- readRDS("data/obesity_region.RDS")
 joined_cor <- readRDS("data/joined_cor.RDS")
 bootstrap_joined <- readRDS("data/bootstrap_joined.RDS")
 joined <- readRDS("data/joined.RDS")
+food_poverty_mean <- readRDS("data/food_poverty_mean.RDS")
+
+bootstrap_joined <- bootstrap_joined %>%
+    mutate(age = as.factor(age),
+           gender = as.factor(gender),
+           race = as.factor(race),
+           urban = as.factor(urban))
+# filter(!is.na(input$demographic))
 
 # ui code
 
@@ -281,10 +290,15 @@ ui <- navbarPage(
                                 br(),
                                 
                                 selectInput("yvariable", tags$b("Outcome Variable:"),
-                                            choices = c("Obesity Rate", "Low Income and Low Food Access", "Low Food Access")),
-                                
+                                            choices = c("Mean Percent Obese" = "mean_perc_obese", 
+                                                        "Mean Percent Low Income and Low Food Access" = "perc_lia", 
+                                                        "Mean Percent Low Food Access" = "perc_la")),
+
                                 selectInput("demographic", tags$b("Demographic Variable:"),
-                                            choices = c("Gender", "Age", "Race", "Ruralness"),
+                                            choices = c("Gender" = "gender", 
+                                                        "Age" = "age", 
+                                                        "Race" = "race", 
+                                                        "Ruralness" = "urban"),
                                             multiple = FALSE),
                             ),
                             
@@ -364,7 +378,7 @@ ui <- navbarPage(
                         
                         column(10,
                         
-                        h2("About me", style = "color: darkred"),
+                        h2("Contact", style = "color: darkred"),
                         
                         br(),
                         
@@ -476,52 +490,54 @@ server <- function(input, output) {
     
     output$demographic <- renderPlot({
         bootstrap_joined <- bootstrap_joined %>%
-            mutate(age = as.factor(age),
-                   gender = as.factor(gender),
-                   race = as.factor(race),
-                   urban = as.factor(urban)) %>%
-            mutate("Age" = age,
-                   "Gender" = gender,
-                   "Race" = race,
-                   "Obesity Rate" = mean_perc_obese,
-                   "Low Income and Low Food Access" = perc_lia,
-                   "Low Food Access" = perc_la,
-                   "Ruralness" = urban) %>%
-            filter(!is.na(input$demographic))
-        
-        new_xaxis_label <- if(input$demographic == "Age"){
+        mutate(age = as.factor(age),
+               gender = as.factor(gender),
+               race = as.factor(race),
+               urban = as.factor(urban))
+        # filter(!is.na(input$demographic))
+
+        new_xaxis_label <- if(input$demographic == "age"){
             print("Age")
-        } else if(input$demographic == "Gender"){
+        } else if(input$demographic == "gender"){
             print("Gender")
-        } else if(input$demographic == "Race"){
+        } else if(input$demographic == "race"){
             print("Race")
-        } else if(input$demographic == "Low Income and Low Food Access"){
-            print("Mean % of Population Classified as Low Income and Low Food Access")
-        } else if(input$demographic == "Low Food Access"){
-            print("Mean % of Population Classified as Low Food Access")
-        } else if(input$demographics == "Ruralness"){
+        } else if(input$demographics == "urban"){
             print("Ruralness")
         }
-        
-        new_yaxis_label <- if(input$yvariable == "Low Income and Low Food Access"){
+
+        new_yaxis_label <- if(input$yvariable == "perc_lia"){
             print("Mean % of Population Classified as Low Income and Low Food Access")
-        } else if(input$demographic == "Low Food Access"){
+        } else if(input$demographic == "perc_la"){
             print("Mean % of Population Classified as Low Food Access")
-        } else if(input$demographic == "Obesity Rate"){
+        } else if(input$demographic == "mean_perc_obese"){
             print("Mean % of Population Classified as Obese or Overweight")
         }
 
-        ggplot(data = bootstrap_joined, aes(x = input$demographic, y = input$yvariable, color = input$demographic)) +
+        ggplot(data = bootstrap_joined, aes(x = input$demographic, y = mean_perc_obese, color = input$demographic)) +
             geom_jitter() +
             theme_minimal() +
             theme(panel.grid.minor.y = element_blank(),
                   panel.grid.minor.x = element_blank(),
-                  axis.text.x = element_text(angle = 35, hjust = 1)) +
-            labs(title = paste("Relationship Between ", input$demographic, " and ", input$yvariable, "", sep = ""),
-                 caption = "Data from US Department of Agriculture and 2010 Census Bureau",
-                 color = "Ruralness",
-                 x = new_xaxis_label,
-                 y = new_yaxis_label)
+                  axis.text.x = element_text(angle = 35, hjust = 1))
+            # labs(title = paste("Relationship Between ", input$demographic, " and ", input$yvariable, "", sep = ""),
+            #      caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+            #      color = "Ruralness",
+                 # x = new_xaxis_label,
+                 # y = new_yaxis_label)
+        
+        # ggplot(data = bootstrap_joined, aes(x = gender, y = mean_perc_obese, color = gender)) +
+        #     geom_jitter() +
+        #     theme_minimal() +
+        #     theme(panel.grid.minor.y = element_blank(),
+        #           panel.grid.minor.x = element_blank(),
+        #           axis.text.x = element_text(angle = 35, hjust = 1)) +
+        #     labs(title = "Poverty Rate on Obesity Rate",
+        #          caption = "Data from US Department of Agriculture and 2010 Census Bureau",
+        #          color = "Ruralness",
+        #          x = "Mean Poverty Rate",
+        #          y = "Mean Obesity Rate")
+        
     })
     
     output$test <- renderPlot({
@@ -549,6 +565,7 @@ server <- function(input, output) {
 # Run the application 
 shinyApp(ui = ui, server = server)
 
-# Ask about ask about factor and 
+# Ask about ask about factor graph, ask about why when I publish, the graph don't show up properly, ask about regression, ask 
+# about gt HTML
 
 
